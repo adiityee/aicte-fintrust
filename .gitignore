@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Node
+node_modules/
+.next/
+out/
+
+# Storage & OS
+*.DS_Store
+Thumbs.db
+minio_data/
+postgres_data/
