@@ -31,6 +31,7 @@ export type FDRStatus =
 export type ProvenanceSourceType =
   | "INSTITUTION_ENTERED"
   | "OCR_EXTRACTED"
+  | "OFFICER_VERIFIED"
   | "BANK_CONFIRMED";
 
 export interface ProvenanceRecord {
