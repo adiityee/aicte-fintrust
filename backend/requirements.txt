@@ -1,0 +1,5 @@
+PyMuPDF>=1.24
+pikepdf>=9.0
+reportlab>=4.0
+pytesseract>=0.3.10
+Pillow>=10.0
