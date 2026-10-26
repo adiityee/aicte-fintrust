@@ -23,6 +23,8 @@ import {
   ApiError,
   BackendFDRResponse,
   BackendAuditLogItem,
+  BackendFDRUploadResponse,
+  BackendDiscrepancyReportResponse,
 } from "@/lib/api";
 
 export type AppMode = "DEMO" | "LIVE";
@@ -49,6 +51,8 @@ interface AppContextType {
   stats: StatisticsOverview;
   isBackendConnected: boolean;
   createDraft: (data: Partial<FDRInstrument>) => Promise<FDRInstrument>;
+  uploadDocument: (id: number, file: File) => Promise<BackendFDRUploadResponse>;
+  validateOCR: (id: number) => Promise<BackendDiscrepancyReportResponse>;
   submitFDR: (id: number) => Promise<boolean>;
   approveClearance: (taskId: number, remarks: string, officerId: string) => Promise<void>;
   rejectClearance: (taskId: number, remarks: string, officerId: string) => Promise<void>;
@@ -73,14 +77,26 @@ const LOCAL_STORAGE_KEY_ALERTS = "fintrust_alerts_v1";
 const LOCAL_STORAGE_KEY_ROLE = "fintrust_role_v1";
 const LOCAL_STORAGE_KEY_MODE = "fintrust_app_mode_v1";
 
+const SEEDED_INSTITUTIONS: Record<number, { name: string; permanent_id: string; state: string }> = {
+  1: { name: "Government College of Engineering", permanent_id: "1-1002345", state: "Maharashtra" },
+  2: { name: "Vasantdada Institute of Technology", permanent_id: "1-1004567", state: "Delhi" },
+  3: { name: "National Institute of Advanced Studies", permanent_id: "1-1008910", state: "Karnataka" },
+};
+
 // Mapper function from Backend API response to Frontend model
 function mapBackendFDRToInstrument(b: BackendFDRResponse): FDRInstrument {
+  const inst = SEEDED_INSTITUTIONS[b.institution_id] || {
+    name: `AICTE Approved Institution #${b.institution_id}`,
+    permanent_id: `inst-demo-${String(b.institution_id).padStart(3, "0")}`,
+    state: "Delhi",
+  };
+
   return {
     id: b.id,
     institution_id: b.institution_id,
-    institution_name: `AICTE Approved Institution #${b.institution_id}`,
-    aicte_permanent_id: `inst-demo-${String(b.institution_id).padStart(3, "0")}`,
-    state: "Delhi",
+    institution_name: inst.name,
+    aicte_permanent_id: inst.permanent_id,
+    state: inst.state,
     fdr_number: b.fdr_number || `FDR2026${b.id}`,
     bank_name: b.bank_name || "State Bank of India",
     branch: "Designated Branch",
@@ -438,6 +454,84 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
     );
 
     return newFdr;
+  };
+
+  // WORKFLOW A: Upload Document
+  const uploadDocument = async (
+    id: number,
+    file: File
+  ): Promise<BackendFDRUploadResponse> => {
+    if (appMode === "LIVE") {
+      try {
+        const res = await api.uploadDocument(id, file, file.name);
+        setFdrs((prev) =>
+          prev.map((f) =>
+            f.id === id
+              ? {
+                  ...f,
+                  document_path: res.document_path,
+                  document_hash: res.document_hash,
+                }
+              : f
+          )
+        );
+        setBackendError(null);
+        return res;
+      } catch (err: any) {
+        setBackendError(`Live Backend Error on uploadDocument: ${err.message}`);
+        throw err;
+      }
+    }
+
+    // DEMO mode
+    const fakeHash = "e0bd5f" + Math.random().toString(16).substring(2, 10);
+    const fakePath = `fdrs/${id}/${Date.now()}_${file.name}`;
+    setFdrs((prev) =>
+      prev.map((f) =>
+        f.id === id
+          ? {
+              ...f,
+              document_path: fakePath,
+              document_hash: fakeHash,
+            }
+          : f
+      )
+    );
+    return {
+      message: "Document uploaded successfully (DEMO mode).",
+      fdr_id: id,
+      document_path: fakePath,
+      document_hash: fakeHash,
+      file_size_bytes: file.size,
+    };
+  };
+
+  // WORKFLOW A: Validate FDR OCR
+  const validateOCR = async (
+    id: number
+  ): Promise<BackendDiscrepancyReportResponse> => {
+    if (appMode === "LIVE") {
+      try {
+        const res = await api.validateFDROCR(id);
+        setBackendError(null);
+        return res;
+      } catch (err: any) {
+        setBackendError(`Live Backend Error on validateOCR: ${err.message}`);
+        throw err;
+      }
+    }
+
+    // DEMO mode
+    return {
+      fdr_id: id,
+      has_discrepancies: false,
+      discrepancy_count: 0,
+      critical_count: 0,
+      fields: {},
+      tamper_indicators: [],
+      duplicate_warning: null,
+      recommended_action: "DEMO_VERIFIED",
+    };
   };
 
   // WORKFLOW A: Submit FDR
@@ -963,6 +1057,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
         stats,
         isBackendConnected: backendStatus === "ONLINE",
         createDraft,
+        uploadDocument,
+        validateOCR,
         submitFDR,
         approveClearance,
         rejectClearance,
