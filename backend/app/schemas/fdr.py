@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import List, Optional
+from typing import Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.fdr import FDRStatus
@@ -64,6 +64,9 @@ class FDRUploadDocumentResponse(BaseModel):
     document_path: str
     document_hash: str
     file_size_bytes: int
+    extracted_fields: Optional[Dict[str, Optional[str]]] = None
+    ocr_status: Optional[str] = None
+    tamper_indicators_count: Optional[int] = 0
 
 
 class FDRDocumentUrlResponse(BaseModel):

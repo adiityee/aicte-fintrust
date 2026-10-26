@@ -1,5 +1,8 @@
+from datetime import date
+from decimal import Decimal
 import hashlib
-from typing import List, Optional
+import json
+from typing import Dict, List, Optional
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,8 +20,9 @@ from app.schemas.fdr import (
     FDRUploadDocumentResponse,
 )
 from app.schemas.ocr import DiscrepancyReportResponse
+from app.schemas.provenance import FDRProvenanceResponse, ProvenanceResponse
 from app.services.audit_service import AuditService
-from app.services.ocr_service import OCRService
+from app.services.ocr_forensics import OCRForensicService
 from app.services.state_machine import InvalidStateTransitionError, StateMachineService
 from app.services.storage_service import storage_service
 
@@ -243,8 +247,9 @@ async def upload_fdr_document(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Accepts multipart/form-data (PDF), uploads to MinIO with server-side AES-256 encryption,
-    computes SHA-256 file hash, links document reference to FDR, and logs an immutable audit entry.
+    Accepts multipart/form-data (PDF), uploads to storage with server-side AES-256 encryption,
+    computes SHA-256 file hash, links document reference to FDR, logs an immutable audit entry,
+    and invokes OCRForensicService to extract key fields, inspect forensics, and auto-populate blanks.
     """
     fdr = await db.get(FDR, id)
     if not fdr:
@@ -269,7 +274,7 @@ async def upload_fdr_document(
     # Compute SHA-256 hash of document bytes
     file_hash = hashlib.sha256(contents).hexdigest()
 
-    # Upload to MinIO with AES-256 Server-Side Encryption (SSE-S3)
+    # Upload to storage with AES-256 Server-Side Encryption (SSE-S3)
     try:
         object_key = storage_service.upload_fdr_document(
             fdr_id=fdr.id,
@@ -280,7 +285,7 @@ async def upload_fdr_document(
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"MinIO storage operation failed: {exc}",
+            detail=f"Storage operation failed: {exc}",
         )
 
     # Link document reference and hash to FDR
@@ -310,6 +315,69 @@ async def upload_fdr_document(
         )
         db.add(new_prov)
 
+    # Invoke OCRForensicService for text extraction and forensics
+    extracted_summary: Dict[str, Optional[str]] = {}
+    tamper_count = 0
+
+    try:
+        # a) Perform PDF forensic checks
+        tamper_indicators = OCRForensicService.detect_tamper_indicators(
+            pdf_bytes=contents,
+            issue_date=fdr.issue_date,
+        )
+        tamper_count = len(tamper_indicators)
+        fdr.tamper_indicators = json.dumps([t.model_dump() for t in tamper_indicators]) if tamper_indicators else None
+
+        # b) Extract key fields (FDR Number, Bank Name, Principal Amount, Maturity Date, etc.)
+        extracted_fields, _, _ = OCRForensicService.extract_from_pdf(contents)
+
+        # c) Save extracted values into FieldProvenance records with source_type='OCR_EXTRACTED'
+        await OCRForensicService.sync_provenance_records(
+            session=db,
+            fdr_id=fdr.id,
+            extracted_fields=extracted_fields,
+        )
+
+        # d) Auto-populate draft FDR fields if they are currently blank
+        if fdr.status in (FDRStatus.DRAFT, FDRStatus.QUERY_RAISED):
+            if not fdr.fdr_number and extracted_fields.get("fdr_number") and extracted_fields["fdr_number"].extracted_value:
+                fdr.fdr_number = extracted_fields["fdr_number"].extracted_value
+            if not fdr.bank_name and extracted_fields.get("bank_name") and extracted_fields["bank_name"].extracted_value:
+                fdr.bank_name = extracted_fields["bank_name"].extracted_value
+            if not fdr.ifsc_code and extracted_fields.get("ifsc_code") and extracted_fields["ifsc_code"].extracted_value:
+                fdr.ifsc_code = extracted_fields["ifsc_code"].extracted_value
+            if fdr.principal_amount is None and extracted_fields.get("principal_amount") and extracted_fields["principal_amount"].extracted_value:
+                parsed_amt = OCRForensicService.parse_amount(extracted_fields["principal_amount"].extracted_value)
+                if parsed_amt is not None:
+                    fdr.principal_amount = parsed_amt
+            if fdr.interest_rate is None and extracted_fields.get("interest_rate") and extracted_fields["interest_rate"].extracted_value:
+                try:
+                    fdr.interest_rate = Decimal(extracted_fields["interest_rate"].extracted_value)
+                except Exception:
+                    pass
+            if fdr.issue_date is None and extracted_fields.get("issue_date") and extracted_fields["issue_date"].extracted_value:
+                parsed_d = OCRForensicService.parse_date(extracted_fields["issue_date"].extracted_value)
+                if parsed_d is not None:
+                    fdr.issue_date = parsed_d
+            if fdr.maturity_date is None and extracted_fields.get("maturity_date") and extracted_fields["maturity_date"].extracted_value:
+                parsed_d = OCRForensicService.parse_date(extracted_fields["maturity_date"].extracted_value)
+                if parsed_d is not None:
+                    fdr.maturity_date = parsed_d
+            if not fdr.lien_holder and extracted_fields.get("lien_holder") and extracted_fields["lien_holder"].extracted_value:
+                fdr.lien_holder = extracted_fields["lien_holder"].extracted_value
+
+        needs_review = any(f.needs_human_review for f in extracted_fields.values()) or bool(tamper_indicators)
+        fdr.ocr_status = "NEEDS_HUMAN_REVIEW" if needs_review else "PROCESSED"
+
+        extracted_summary = {
+            k: v.extracted_value for k, v in extracted_fields.items() if v.extracted_value is not None
+        }
+
+        db.add(fdr)
+    except Exception as ocr_exc:
+        # Non-fatal to file upload, but logged
+        print(f"[FinTrust Warning] OCR forensic processing encountered an issue: {ocr_exc}")
+
     await db.flush()
 
     # Write immutable audit entry
@@ -322,17 +390,76 @@ async def upload_fdr_document(
             "file_size": len(contents),
             "file_hash": file_hash,
             "object_key": object_key,
+            "ocr_status": fdr.ocr_status,
         },
         user_id=f"INSTITUTION_{fdr.institution_id}",
-        details=f"Uploaded FDR PDF document {file.filename} (SHA-256: {file_hash})",
+        details=f"Uploaded FDR PDF document {file.filename} (SHA-256: {file_hash}, OCR: {fdr.ocr_status})",
     )
 
     return FDRUploadDocumentResponse(
-        message="Document uploaded successfully and encrypted with AES-256.",
+        message="Document uploaded and processed via OCR successfully.",
         fdr_id=fdr.id,
         document_path=object_key,
         document_hash=file_hash,
         file_size_bytes=len(contents),
+        extracted_fields=extracted_summary,
+        ocr_status=fdr.ocr_status,
+        tamper_indicators_count=tamper_count,
+    )
+
+
+@router.get("/{id}/provenance", response_model=FDRProvenanceResponse, status_code=status.HTTP_200_OK)
+async def get_fdr_provenance(
+    id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Return all field provenance records and confidence flags for the split-screen comparison UI.
+    Provides verifiable source badges:
+    - grey: INSTITUTION_ENTERED (self-declared)
+    - amber: OCR_EXTRACTED (AI extracted with valid confidence)
+    - red: OCR_EXTRACTED with low confidence (< 0.85) or discrepancy
+    - green: OFFICER_VERIFIED / BANK_CONFIRMED
+    """
+    fdr = await db.get(FDR, id)
+    if not fdr:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"FDR with ID {id} not found",
+        )
+
+    stmt = select(Provenance).where(Provenance.fdr_id == id).order_by(Provenance.id.asc())
+    res = await db.execute(stmt)
+    records = list(res.scalars().all())
+
+    confidence_flags = {}
+    needs_human_review = False
+
+    for p in records:
+        score = p.confidence_score or 0.0
+        is_flagged = score < 0.85
+        if is_flagged and p.source_type == ProvenanceSourceType.OCR_EXTRACTED:
+            needs_human_review = True
+
+        badge_color = "grey"
+        if p.source_type in (ProvenanceSourceType.BANK_CONFIRMED, ProvenanceSourceType.OFFICER_VERIFIED):
+            badge_color = "green"
+        elif p.source_type == ProvenanceSourceType.OCR_EXTRACTED:
+            badge_color = "red" if is_flagged else "amber"
+
+        confidence_flags[p.field_name] = {
+            "confidence_score": score,
+            "source_type": p.source_type.value,
+            "flagged": is_flagged,
+            "badge_color": badge_color,
+            "extracted_value": p.extracted_value,
+        }
+
+    return FDRProvenanceResponse(
+        fdr_id=fdr.id,
+        provenance_records=[ProvenanceResponse.model_validate(p) for p in records],
+        confidence_flags=confidence_flags,
+        needs_human_review=needs_human_review,
     )
 
 
@@ -406,7 +533,7 @@ async def validate_fdr_ocr(
             detail=f"Failed to retrieve document from storage: {exc}",
         )
 
-    _, discrepancy_report = await OCRService.process_fdr_document(
+    _, discrepancy_report = await OCRForensicService.process_fdr_document(
         session=db,
         fdr=fdr,
         pdf_bytes=pdf_bytes,

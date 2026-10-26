@@ -25,6 +25,7 @@ from app.services.noc_service import (
     sign_payload,
     verify_signature,
 )
+from app.services.ocr_forensics import OCRForensicService
 from app.services.ocr_service import OCRService
 from app.services.reminder_service import (
     DEFAULT_OFFSETS,
@@ -68,6 +69,7 @@ __all__ = [
     "generate_release_payload",
     # Forensics & OCR
     "OCRService",
+    "OCRForensicService",
     # Bank Adapters
     "BankAdapterInterface",
     "SimulatedBankAdapter",

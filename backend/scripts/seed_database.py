@@ -500,31 +500,37 @@ async def main() -> None:
     # Determine connection engine
     target_engine = default_engine
     if args.sqlite:
-        db_file = os.path.join(BACKEND_DIR, "fintrust_seed.db").replace("\\", "/")
+        db_file = os.path.join(BACKEND_DIR, "fintrust.db").replace("\\", "/")
         sqlite_url = f"sqlite+aiosqlite:///{db_file}"
-        print(f"[DB] Using SQLite database for seeding: {sqlite_url}")
+        print(f"[DB] Using local SQLite database for seeding: {sqlite_url}")
         target_engine = create_async_engine(sqlite_url, echo=False)
     elif args.db_url:
         print(f"[DB] Using custom database URL: {args.db_url}")
         target_engine = create_async_engine(args.db_url, echo=False)
     else:
-        print(f"[DB] Connecting to PostgreSQL database: {settings.DATABASE_URL}")
+        print(f"[DB] Attempting connection to: {settings.DATABASE_URL}")
 
-    # Initialize tables
+    # Initialize tables with graceful fallback to SQLite if PostgreSQL is unreachable
     try:
         async with target_engine.begin() as conn:
+            await conn.execute(text("SELECT 1"))
             await conn.run_sync(Base.metadata.create_all)
     except Exception as conn_exc:
-        print(f"\n[ERROR] Failed to connect to database at {target_engine.url}: {conn_exc}", file=sys.stderr)
         if "postgresql" in str(target_engine.url):
-            print(
-                "\n[TIP] Ensure PostgreSQL is running via Docker Compose:\n"
-                "       docker compose up -d\n"
-                "       Or test offline with the SQLite flag:\n"
-                "       python -m scripts.seed_database --sqlite\n",
-                file=sys.stderr,
-            )
-        sys.exit(1)
+            fallback_path = os.path.join(BACKEND_DIR, "fintrust.db").replace("\\", "/")
+            fallback_url = f"sqlite+aiosqlite:///{fallback_path}"
+            print(f"[DB] PostgreSQL unavailable ({conn_exc}).")
+            print(f"[DB] Seamlessly falling back to local SQLite database: {fallback_url}")
+            try:
+                await target_engine.dispose()
+            except Exception:
+                pass
+            target_engine = create_async_engine(fallback_url, echo=False)
+            async with target_engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+        else:
+            print(f"\n[ERROR] Failed to connect to database at {target_engine.url}: {conn_exc}", file=sys.stderr)
+            sys.exit(1)
 
     session_maker = async_sessionmaker(
         bind=target_engine,
