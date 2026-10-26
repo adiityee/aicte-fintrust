@@ -22,6 +22,7 @@ router = APIRouter()
 async def get_active_reminders(
     role: str = Query("ALL", description="Filter by role: INSTITUTION, REGIONAL_OFFICER, ALL"),
     institution_id: Optional[int] = Query(None, description="Optional institution ID filter"),
+    officer_id: Optional[str] = Query(None, description="Optional officer ID filter"),
     status_filter: Optional[ReminderStatus] = Query(None, alias="status", description="Filter by status"),
     db: AsyncSession = Depends(get_db),
 ):
@@ -45,6 +46,10 @@ async def get_active_reminders(
     role_upper = role.upper()
     if role_upper == "REGIONAL_OFFICER":
         query = query.where(ReminderAlert.status == ReminderStatus.ESCALATED)
+        if officer_id:
+            query = query.where(
+                (ReminderAlert.assigned_officer_id == officer_id) | (ReminderAlert.assigned_officer_id == "REGIONAL_OFFICER")
+            )
     elif role_upper == "INSTITUTION" and institution_id is not None:
         query = query.where(ReminderAlert.institution_id == institution_id)
     elif institution_id is not None:

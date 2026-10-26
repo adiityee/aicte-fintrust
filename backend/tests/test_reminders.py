@@ -179,6 +179,7 @@ async def test_escalation_trigger_within_7_days(client_session):
         esc_alert = escalated[0]
         assert esc_alert.status == ReminderStatus.ESCALATED
         assert esc_alert.recipient == "regional_officer@aicte-india.org"
+        assert esc_alert.assigned_officer_id == "REGIONAL_OFFICER"
         assert "[ESCALATED" in esc_alert.message
 
         # Verify audit event logged
