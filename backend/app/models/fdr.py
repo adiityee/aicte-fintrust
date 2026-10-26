@@ -61,6 +61,7 @@ class FDR(Base):
     )
 
     document_path: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    document_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

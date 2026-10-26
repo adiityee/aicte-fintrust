@@ -1,5 +1,6 @@
+import hashlib
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -8,9 +9,16 @@ from app.core.database import get_db
 from app.models.fdr import FDR, FDRStatus
 from app.models.institution import Institution
 from app.models.provenance import Provenance, ProvenanceSourceType
-from app.schemas.fdr import FDRDraftRequest, FDRResponse, FDRSubmitResponse
+from app.schemas.fdr import (
+    FDRDocumentUrlResponse,
+    FDRDraftRequest,
+    FDRResponse,
+    FDRSubmitResponse,
+    FDRUploadDocumentResponse,
+)
 from app.services.audit_service import AuditService
 from app.services.state_machine import InvalidStateTransitionError, StateMachineService
+from app.services.storage_service import storage_service
 
 router = APIRouter()
 
@@ -224,3 +232,143 @@ async def get_institution_fdrs(
     result = await db.execute(stmt)
     records = list(result.scalars().all())
     return [FDRResponse.model_validate(r) for r in records]
+
+
+@router.post("/{id}/upload-document", response_model=FDRUploadDocumentResponse, status_code=status.HTTP_200_OK)
+async def upload_fdr_document(
+    id: int,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Accepts multipart/form-data (PDF), uploads to MinIO with server-side AES-256 encryption,
+    computes SHA-256 file hash, links document reference to FDR, and logs an immutable audit entry.
+    """
+    fdr = await db.get(FDR, id)
+    if not fdr:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"FDR with ID {id} not found",
+        )
+
+    if file.filename and not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only PDF documents (.pdf) are accepted for FDR uploads",
+        )
+
+    contents = await file.read()
+    if not contents:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file is empty",
+        )
+
+    # Compute SHA-256 hash of document bytes
+    file_hash = hashlib.sha256(contents).hexdigest()
+
+    # Upload to MinIO with AES-256 Server-Side Encryption (SSE-S3)
+    try:
+        object_key = storage_service.upload_fdr_document(
+            fdr_id=fdr.id,
+            file_bytes=contents,
+            filename=file.filename or f"fdr_{fdr.id}.pdf",
+            content_type=file.content_type or "application/pdf",
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"MinIO storage operation failed: {exc}",
+        )
+
+    # Link document reference and hash to FDR
+    fdr.document_path = object_key
+    fdr.document_hash = file_hash
+    db.add(fdr)
+
+    # Record provenance for document file
+    prov_stmt = select(Provenance).where(
+        Provenance.fdr_id == fdr.id,
+        Provenance.field_name == "document_file",
+    )
+    prov_res = await db.execute(prov_stmt)
+    prov = prov_res.scalar_one_or_none()
+    if prov:
+        prov.extracted_value = file_hash
+        prov.source_type = ProvenanceSourceType.INSTITUTION_ENTERED
+        prov.confidence_score = 1.0
+        db.add(prov)
+    else:
+        new_prov = Provenance(
+            fdr_id=fdr.id,
+            field_name="document_file",
+            source_type=ProvenanceSourceType.INSTITUTION_ENTERED,
+            confidence_score=1.0,
+            extracted_value=file_hash,
+        )
+        db.add(new_prov)
+
+    await db.flush()
+
+    # Write immutable audit entry
+    await AuditService.record_event(
+        session=db,
+        action="FDR_DOCUMENT_UPLOADED",
+        payload={
+            "fdr_id": fdr.id,
+            "filename": file.filename,
+            "file_size": len(contents),
+            "file_hash": file_hash,
+            "object_key": object_key,
+        },
+        user_id=f"INSTITUTION_{fdr.institution_id}",
+        details=f"Uploaded FDR PDF document {file.filename} (SHA-256: {file_hash})",
+    )
+
+    return FDRUploadDocumentResponse(
+        message="Document uploaded successfully and encrypted with AES-256.",
+        fdr_id=fdr.id,
+        document_path=object_key,
+        document_hash=file_hash,
+        file_size_bytes=len(contents),
+    )
+
+
+@router.get("/{id}/document-url", response_model=FDRDocumentUrlResponse)
+async def get_fdr_document_url(
+    id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Returns a secure, temporary pre-signed download URL valid for under 5 minutes (300s).
+    """
+    fdr = await db.get(FDR, id)
+    if not fdr:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"FDR with ID {id} not found",
+        )
+
+    if not fdr.document_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No document has been uploaded for FDR {id}",
+        )
+
+    try:
+        presigned_url = storage_service.generate_presigned_url(
+            object_key=fdr.document_path,
+            expires_in_seconds=300,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate presigned download URL: {exc}",
+        )
+
+    return FDRDocumentUrlResponse(
+        fdr_id=fdr.id,
+        document_path=fdr.document_path,
+        presigned_url=presigned_url,
+        expires_in_seconds=300,
+    )

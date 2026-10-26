@@ -24,7 +24,7 @@ class Settings:
     MINIO_ROOT_USER: str = os.getenv("MINIO_ROOT_USER", "minioadmin")
     MINIO_ROOT_PASSWORD: str = os.getenv("MINIO_ROOT_PASSWORD", "minioadmin")
     MINIO_SECURE: bool = os.getenv("MINIO_SECURE", "False").lower() in ("true", "1")
-    MINIO_BUCKET_FDR: str = os.getenv("MINIO_BUCKET_FDR", "fintrust-fdrs")
+    MINIO_BUCKET_FDR: str = os.getenv("MINIO_BUCKET_FDR", "fdr-documents")
 
     # Redis Settings
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")

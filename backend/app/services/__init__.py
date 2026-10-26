@@ -10,6 +10,7 @@ from app.services.state_machine import (
     InvalidStateTransitionError,
     StateMachineService,
 )
+from app.services.storage_service import StorageService, storage_service
 
 __all__ = [
     "GENESIS_HASH",
@@ -20,4 +21,6 @@ __all__ = [
     "StateMachineService",
     "InvalidStateTransitionError",
     "ALLOWED_TRANSITIONS",
+    "StorageService",
+    "storage_service",
 ]

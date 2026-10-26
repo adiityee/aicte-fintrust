@@ -37,6 +37,7 @@ class FDRResponse(BaseModel):
     lien_holder: str
     status: FDRStatus
     document_path: Optional[str] = None
+    document_hash: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     provenance_records: List[ProvenanceResponse] = Field(default_factory=list)
@@ -50,3 +51,20 @@ class FDRSubmitResponse(BaseModel):
     message: str
     fdr: FDRResponse
     audit_hash: str
+
+
+class FDRUploadDocumentResponse(BaseModel):
+    """Response returned upon document upload."""
+    message: str
+    fdr_id: int
+    document_path: str
+    document_hash: str
+    file_size_bytes: int
+
+
+class FDRDocumentUrlResponse(BaseModel):
+    """Response with presigned document URL."""
+    fdr_id: int
+    document_path: str
+    presigned_url: str
+    expires_in_seconds: int
