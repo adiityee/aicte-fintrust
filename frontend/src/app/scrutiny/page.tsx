@@ -26,7 +26,9 @@ import {
 
 export default function ScrutinyConsolePage() {
   const {
+    appMode,
     fdrs,
+    verifyField,
     raiseScrutinyQuery,
     passScrutinyToBank,
     confirmBankAffirmation,
@@ -47,9 +49,45 @@ export default function ScrutinyConsolePage() {
   const [queryInput, setQueryInput] = useState<string>("");
   const [showQueryBox, setShowQueryBox] = useState<boolean>(false);
   const [zoomLevel, setZoomLevel] = useState<number>(100);
+  const [verifyingField, setVerifyingField] = useState<string | null>(null);
+  const [isVerifyingAll, setIsVerifyingAll] = useState<boolean>(false);
 
   const activeCase =
     fdrs.find((f) => f.id === selectedCaseId) || scrutinyQueue[0] || fdrs[0];
+
+  const handleVerifyField = async (fieldName: string, value: string) => {
+    setVerifyingField(fieldName);
+    const ok = await verifyField(
+      activeCase.id,
+      fieldName,
+      value,
+      "SCRUTINY_OFFICER_01",
+      `Attested by Scrutiny Officer in Scrutiny Console`
+    );
+    setVerifyingField(null);
+    if (ok) {
+      alert(`Field "${fieldName}" attested and upgraded to OFFICER_VERIFIED (persisted in PostgreSQL & audit ledger).`);
+    }
+  };
+
+  const handleVerifyAllFields = async () => {
+    setIsVerifyingAll(true);
+    let count = 0;
+    for (const prov of activeCase.provenance_records) {
+      if (prov.source_type !== "OFFICER_VERIFIED" && prov.source_type !== "BANK_CONFIRMED") {
+        const ok = await verifyField(
+          activeCase.id,
+          prov.field_name,
+          prov.extracted_value || "",
+          "SCRUTINY_OFFICER_01",
+          `Batch attested by Scrutiny Officer`
+        );
+        if (ok) count++;
+      }
+    }
+    setIsVerifyingAll(false);
+    alert(`Attestation complete: ${count} field(s) upgraded to OFFICER_VERIFIED in PostgreSQL.`);
+  };
 
   const handleRaiseQuery = () => {
     if (!queryInput.trim()) {
@@ -64,16 +102,28 @@ export default function ScrutinyConsolePage() {
 
   const handleApproveForBank = () => {
     passScrutinyToBank(activeCase.id);
-    alert(
-      `Scrutiny approved! Single-use HMAC signed verification link dispatched to nodal branch nodal email.`
-    );
+    if (appMode === "LIVE") {
+      alert(
+        `Scrutiny approved in UI console. Note: FastAPI backend does not have a bank confirmation router mounted yet; bank token dispatch and affirmation below run via the client-side simulated adapter.`
+      );
+    } else {
+      alert(
+        `Scrutiny approved! Single-use HMAC signed verification link dispatched to nodal branch nodal email.`
+      );
+    }
   };
 
   const handleSimulateBankAffirmation = () => {
     confirmBankAffirmation(activeCase.id);
-    alert(
-      `Simulated Bank Affirmation Successful! Branch confirmed lien in favor of AICTE. Provenance upgraded to BANK_CONFIRMED.`
-    );
+    if (appMode === "LIVE") {
+      alert(
+        `Simulated Bank Affirmation applied in UI (DEMO ADAPTER). Notice: This simulation is client-side only because FastAPI does not expose a bank verification endpoint. Upon browser/repository refresh, data will sync with PostgreSQL. Attested fields (OFFICER_VERIFIED) remain permanently saved in PostgreSQL.`
+      );
+    } else {
+      alert(
+        `Simulated Bank Affirmation Successful! Branch confirmed lien in favor of AICTE. Provenance upgraded to BANK_CONFIRMED.`
+      );
+    }
   };
 
   return (
@@ -342,15 +392,34 @@ export default function ScrutinyConsolePage() {
                         {prov.extracted_value || "—"}
                       </p>
                     </div>
-                    <div className="text-right">
+                    <div className="flex items-center gap-2">
                       <BadgeProvenance
                         sourceType={prov.source_type}
                         confidenceScore={prov.confidence_score}
                         size="sm"
                       />
+                      {prov.source_type !== "OFFICER_VERIFIED" && prov.source_type !== "BANK_CONFIRMED" && (
+                        <button
+                          onClick={() => handleVerifyField(prov.field_name, prov.extracted_value || "")}
+                          disabled={verifyingField === prov.field_name || isVerifyingAll}
+                          className="text-[10px] px-2 py-0.5 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium border border-blue-200 transition-colors"
+                          title="Attest this field as Scrutiny Officer"
+                        >
+                          {verifyingField === prov.field_name ? "..." : "Attest"}
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
+
+                <button
+                  onClick={handleVerifyAllFields}
+                  disabled={isVerifyingAll || activeCase.provenance_records.every((p) => p.source_type === "OFFICER_VERIFIED")}
+                  className="w-full mt-2 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 disabled:opacity-50 text-blue-800 border border-blue-200 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
+                  <span>{isVerifyingAll ? "Attesting All Fields..." : "Attest All Fields (Officer Scrutiny)"}</span>
+                </button>
               </div>
             </div>
 
@@ -417,15 +486,22 @@ export default function ScrutinyConsolePage() {
                       <Clock className="w-3.5 h-3.5 text-purple-600" />
                       <span>Pending Bank Branch Affirmation</span>
                     </div>
+                    {appMode === "LIVE" && (
+                      <div className="p-2 rounded bg-amber-50 border border-amber-200 text-amber-900 text-[11px] leading-tight">
+                        <span className="font-bold">Backend Route Gap:</span> FastAPI does not currently have a bank confirmation router mounted (/api/v1/bank). The simulation below runs via client demo adapter and will not persist to PostgreSQL.
+                      </div>
+                    )}
                     <p className="text-[11px] text-purple-700 leading-tight">
-                      Signed link active for branch nodal officer. For demo evaluation, trigger simulated affirmation below:
+                      {appMode === "LIVE"
+                        ? "For UI demonstration, you may trigger the simulated demo adapter below:"
+                        : "Signed link active for branch nodal officer. For demo evaluation, trigger simulated affirmation below:"}
                     </p>
                     <button
                       onClick={handleSimulateBankAffirmation}
                       className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm"
                     >
                       <ShieldCheck className="w-4 h-4" />
-                      <span>Simulate Bank Affirmation (Demo Adapter)</span>
+                      <span>Simulate Bank Affirmation {appMode === "LIVE" ? "(Demo Adapter — Not Persisted in DB)" : "(Demo Adapter)"}</span>
                     </button>
                     <p className="text-[10px] text-slate-400 italic text-center">
                       Clearly marked as simulated demo adapter per competition guidelines.

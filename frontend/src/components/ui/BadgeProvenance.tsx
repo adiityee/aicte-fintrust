@@ -1,6 +1,6 @@
 import React from "react";
 import { ProvenanceSourceType } from "@/types";
-import { ShieldCheck, Eye, UserCheck, AlertTriangle } from "lucide-react";
+import { ShieldCheck, Eye, UserCheck, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 interface BadgeProvenanceProps {
   sourceType: ProvenanceSourceType;
@@ -25,6 +25,20 @@ export const BadgeProvenance: React.FC<BadgeProvenanceProps> = ({
       >
         <ShieldCheck className={size === "sm" ? "w-3 h-3 text-emerald-600" : "w-3.5 h-3.5 text-emerald-600"} />
         {showLabel && <span>Bank Affirmed (Simulated)</span>}
+      </span>
+    );
+  }
+
+  if (sourceType === "OFFICER_VERIFIED") {
+    return (
+      <span
+        title="Officer Verified: Formally verified & attested by AICTE Scrutiny Officer (SHA-256 Chained)"
+        className={`inline-flex items-center gap-1 font-medium rounded-full border border-blue-300 bg-blue-50 text-blue-800 ${
+          size === "sm" ? "px-2 py-0.5 text-xs" : "px-2.5 py-1 text-xs"
+        }`}
+      >
+        <CheckCircle2 className={size === "sm" ? "w-3 h-3 text-blue-600" : "w-3.5 h-3.5 text-blue-600"} />
+        {showLabel && <span>Officer Verified</span>}
       </span>
     );
   }

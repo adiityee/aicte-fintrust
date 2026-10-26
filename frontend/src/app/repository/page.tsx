@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import { useApp } from "@/context/AppContext";
-import { formatINR, formatDate, truncateHash } from "@/lib/utils";
+import { formatINR, formatDate, truncateHash, getOverallProvenance } from "@/lib/utils";
 import { BadgeStatus } from "@/components/ui/BadgeStatus";
 import { BadgeProvenance } from "@/components/ui/BadgeProvenance";
 import { FDRInstrument, FDRStatus } from "@/types";
@@ -273,9 +273,8 @@ export default function RepositoryPage() {
                 </tr>
               ) : (
                 filteredFdrs.map((f) => {
-                  const provSource =
-                    f.provenance_records[0]?.source_type || "INSTITUTION_ENTERED";
-                  const provScore = f.provenance_records[0]?.confidence_score;
+                  const { sourceType: provSource, confidenceScore: provScore } =
+                    getOverallProvenance(f.provenance_records);
 
                   return (
                     <tr

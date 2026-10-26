@@ -436,7 +436,11 @@ export default function ReleaseGatePage() {
                     Per the AICTE PS specification, the system never auto-releases. The release button stays strictly disabled until all configured clearances pass.
                   </p>
                   <p className="text-[10px] text-slate-500 italic">
-                    Waiting on: Vigilance Cell Affirmation
+                    Waiting on:{" "}
+                    {activeCase?.clearances
+                      .filter((c) => c.status !== "APPROVED")
+                      .map((c) => c.cell_name)
+                      .join(", ") || "Pending cell review"}
                   </p>
                 </div>
               )}

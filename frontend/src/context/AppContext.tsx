@@ -57,6 +57,13 @@ interface AppContextType {
   approveClearance: (taskId: number, remarks: string, officerId: string) => Promise<void>;
   rejectClearance: (taskId: number, remarks: string, officerId: string) => Promise<void>;
   authorizeRelease: (fdrId: number, authorityName: string) => boolean;
+  verifyField: (
+    fdrId: number,
+    fieldName: string,
+    acceptedValue: string,
+    officerId?: string,
+    remarks?: string
+  ) => Promise<boolean>;
   confirmBankAffirmation: (fdrId: number) => void;
   raiseScrutinyQuery: (fdrId: number, remarks: string) => void;
   passScrutinyToBank: (fdrId: number) => void;
@@ -167,10 +174,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
     if (appMode !== "LIVE") return;
 
     try {
-      // 1. Fetch FDR records for Institution 1
-      const backendFdrs = await api.getInstitutionFDRs(1);
-      if (backendFdrs && backendFdrs.length > 0) {
-        setFdrs(backendFdrs.map(mapBackendFDRToInstrument));
+      // 1. Fetch FDR records across all seeded institutions (1, 2, 3)
+      const [fdrs1, fdrs2, fdrs3] = await Promise.all([
+        api.getInstitutionFDRs(1).catch(() => []),
+        api.getInstitutionFDRs(2).catch(() => []),
+        api.getInstitutionFDRs(3).catch(() => []),
+      ]);
+      const combinedFdrs = [...fdrs1, ...fdrs2, ...fdrs3];
+      if (combinedFdrs.length > 0) {
+        setFdrs(combinedFdrs.map(mapBackendFDRToInstrument));
       }
 
       // 2. Fetch live audit trail
@@ -875,6 +887,86 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
     return true;
   };
 
+  // WORKFLOW C: Officer Field Verification (FastAPI + PostgreSQL Persisted)
+  const verifyField = async (
+    fdrId: number,
+    fieldName: string,
+    acceptedValue: string,
+    officerId = "SCRUTINY_OFFICER_01",
+    remarks?: string
+  ): Promise<boolean> => {
+    if (appMode === "LIVE") {
+      try {
+        await api.verifyField(
+          fdrId,
+          fieldName,
+          acceptedValue,
+          officerId,
+          remarks || `Field verified by officer ${officerId}`
+        );
+
+        // Optimistically update local state
+        setFdrs((prev) =>
+          prev.map((item) => {
+            if (item.id !== fdrId) return item;
+            const updatedProvenance = item.provenance_records.map((p) =>
+              p.field_name === fieldName
+                ? {
+                    ...p,
+                    source_type: "OFFICER_VERIFIED" as const,
+                    extracted_value: acceptedValue,
+                    confidence_score: 1.0,
+                  }
+                : p
+            );
+            return {
+              ...item,
+              provenance_records: updatedProvenance,
+              updated_at: new Date().toISOString(),
+            };
+          })
+        );
+
+        // Re-sync with backend to fetch updated DB state and audit ledger
+        await refreshBackendData();
+        return true;
+      } catch (err: any) {
+        setBackendError(`Failed to verify field on live backend: ${err.message}`);
+        return false;
+      }
+    } else {
+      // Demo Mode: local state mutation
+      setFdrs((prev) =>
+        prev.map((item) => {
+          if (item.id !== fdrId) return item;
+          const updatedProvenance = item.provenance_records.map((p) =>
+            p.field_name === fieldName
+              ? {
+                  ...p,
+                  source_type: "OFFICER_VERIFIED" as const,
+                  extracted_value: acceptedValue,
+                  confidence_score: 1.0,
+                }
+              : p
+          );
+          return {
+            ...item,
+            provenance_records: updatedProvenance,
+            updated_at: new Date().toISOString(),
+          };
+        })
+      );
+
+      recordAuditEntry(
+        "OFFICER_FIELD_VERIFIED",
+        { fdr_id: fdrId, field_name: fieldName, accepted_value: acceptedValue },
+        officerId,
+        `Field '${fieldName}' attested and verified by ${officerId}`
+      );
+      return true;
+    }
+  };
+
   // WORKFLOW C: Confirm Bank Affirmation (Simulated Bank Gateway)
   const confirmBankAffirmation = (fdrId: number) => {
     setFdrs((prev) =>
@@ -1063,6 +1155,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
         approveClearance,
         rejectClearance,
         authorizeRelease,
+        verifyField,
         confirmBankAffirmation,
         raiseScrutinyQuery,
         passScrutinyToBank,

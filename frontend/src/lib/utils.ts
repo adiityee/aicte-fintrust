@@ -78,3 +78,32 @@ export function getDaysUntilMaturity(maturityDateStr: string): number {
   const diffTime = target - now;
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 }
+
+/**
+ * Determine the overall provenance tier and average confidence score for an FDR
+ * based on all its field-level provenance records.
+ */
+export function getOverallProvenance(
+  records?: { source_type: string; confidence_score?: number | null }[]
+): {
+  sourceType: "INSTITUTION_ENTERED" | "OCR_EXTRACTED" | "OFFICER_VERIFIED" | "BANK_CONFIRMED";
+  confidenceScore: number | null;
+} {
+  if (!records || records.length === 0) {
+    return { sourceType: "INSTITUTION_ENTERED", confidenceScore: null };
+  }
+  if (records.some((r) => r.source_type === "BANK_CONFIRMED")) {
+    return { sourceType: "BANK_CONFIRMED", confidenceScore: 1.0 };
+  }
+  if (records.some((r) => r.source_type === "OFFICER_VERIFIED")) {
+    return { sourceType: "OFFICER_VERIFIED", confidenceScore: 1.0 };
+  }
+  const ocrRecords = records.filter((r) => r.source_type === "OCR_EXTRACTED");
+  if (ocrRecords.length > 0) {
+    const avgScore =
+      ocrRecords.reduce((acc, r) => acc + (r.confidence_score || 0), 0) /
+      ocrRecords.length;
+    return { sourceType: "OCR_EXTRACTED", confidenceScore: avgScore };
+  }
+  return { sourceType: "INSTITUTION_ENTERED", confidenceScore: null };
+}

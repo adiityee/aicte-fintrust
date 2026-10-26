@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useApp } from "@/context/AppContext";
-import { formatINR, formatINRCompact, formatDate } from "@/lib/utils";
+import { formatINR, formatINRCompact, formatDate, getOverallProvenance } from "@/lib/utils";
 import { StatCard } from "@/components/ui/StatCard";
 import { BadgeStatus } from "@/components/ui/BadgeStatus";
 import { BadgeProvenance } from "@/components/ui/BadgeProvenance";
@@ -455,9 +455,8 @@ export default function CommandOverview() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {fdrs.slice(0, 5).map((f) => {
-                const provSource =
-                  f.provenance_records[0]?.source_type || "INSTITUTION_ENTERED";
-                const provScore = f.provenance_records[0]?.confidence_score;
+                const { sourceType: provSource, confidenceScore: provScore } =
+                  getOverallProvenance(f.provenance_records);
 
                 return (
                   <tr key={f.id} className="hover:bg-slate-50/70 transition-colors">
