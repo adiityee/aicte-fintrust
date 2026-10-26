@@ -1,3 +1,6 @@
+<<<<<<< HEAD
+"""Document processing and external integration services."""
+=======
 from app.services.audit_service import (
     GENESIS_HASH,
     AuditService,
@@ -24,3 +27,4 @@ __all__ = [
     "StorageService",
     "storage_service",
 ]
+>>>>>>> e3d9d0601cedba88ca0803cb6df13face8ac5b1c
