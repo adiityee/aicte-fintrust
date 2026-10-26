@@ -163,6 +163,7 @@ class ReminderService:
             if days_left <= escalation_threshold_days:
                 alert.status = ReminderStatus.ESCALATED
                 alert.recipient = "regional_officer@aicte-india.org"
+                alert.assigned_officer_id = "REGIONAL_OFFICER"
                 if alert.message and "[ESCALATED" not in alert.message:
                     alert.message += " [ESCALATED: Alert unacknowledged within 7 days of deadline. Escalated to Regional Officer.]"
 
@@ -190,16 +191,21 @@ class ReminderService:
         session: AsyncSession,
         fdr_id: int | str,
         officer_id: Optional[str] = "REGIONAL_OFFICER",
+        grace_period_days: int = 15,
+        reference_date: Optional[date] = None,
     ) -> Dict[str, Any]:
         """
         Safe default-encashment trigger:
-        If renewal is completely missed past maturity, drafts an official demand notice PDF
+        If renewal is completely missed past maturity and grace period, drafts an official demand notice PDF
         and routes it to an officer's approval queue. The system drafts it; an officer must sign it.
         """
         int_id = int(fdr_id)
         fdr = await session.get(FDR, int_id)
         if not fdr:
             raise ValueError(f"FDR with ID {fdr_id} not found")
+
+        ref_date = reference_date or date.today()
+        days_past_maturity = (ref_date - fdr.maturity_date).days if fdr.maturity_date else 0
 
         notice_year = datetime.now(timezone.utc).year
         notice_ref = f"AICTE/FD/ENCASH/{notice_year}/{fdr.id:04d}"

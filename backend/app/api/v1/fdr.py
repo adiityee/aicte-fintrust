@@ -16,7 +16,9 @@ from app.schemas.fdr import (
     FDRSubmitResponse,
     FDRUploadDocumentResponse,
 )
+from app.schemas.ocr import DiscrepancyReportResponse
 from app.services.audit_service import AuditService
+from app.services.ocr_service import OCRService
 from app.services.state_machine import InvalidStateTransitionError, StateMachineService
 from app.services.storage_service import storage_service
 
@@ -372,3 +374,42 @@ async def get_fdr_document_url(
         presigned_url=presigned_url,
         expires_in_seconds=300,
     )
+
+
+@router.post("/{id}/validate-ocr", response_model=DiscrepancyReportResponse, status_code=status.HTTP_200_OK)
+async def validate_fdr_ocr(
+    id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Executes Dual-Pass Verification (Extraction, Forensics & Side-by-Side Discrepancy Matching)
+    for the FDR's uploaded document and returns discrepancy analysis.
+    """
+    fdr = await get_fdr_with_relations(db, id)
+    if not fdr:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"FDR with ID {id} not found",
+        )
+
+    if not fdr.document_path:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No document uploaded for FDR {id} yet. Please upload a PDF first.",
+        )
+
+    try:
+        pdf_bytes = storage_service.download_fdr_document(fdr.document_path)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve document from storage: {exc}",
+        )
+
+    _, discrepancy_report = await OCRService.process_fdr_document(
+        session=db,
+        fdr=fdr,
+        pdf_bytes=pdf_bytes,
+    )
+
+    return discrepancy_report

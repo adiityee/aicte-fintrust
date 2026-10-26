@@ -8,6 +8,13 @@ from app.services.audit_service import (
     hash_payload,
     normalize_timestamp,
 )
+from app.services.noc_service import (
+    NOCService,
+    generate_release_payload,
+    sign_payload,
+    verify_signature,
+)
+from app.services.ocr_service import OCRService
 from app.services.reminder_service import DEFAULT_OFFSETS, ReminderService
 from app.services.state_machine import (
     ALLOWED_TRANSITIONS,
@@ -29,5 +36,10 @@ __all__ = [
     "storage_service",
     "ReminderService",
     "DEFAULT_OFFSETS",
+    "OCRService",
+    "NOCService",
+    "sign_payload",
+    "verify_signature",
+    "generate_release_payload",
 ]
 >>>>>>> e3d9d0601cedba88ca0803cb6df13face8ac5b1c

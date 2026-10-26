@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 import enum
 from typing import TYPE_CHECKING, List, Optional
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, func
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -62,6 +62,13 @@ class FDR(Base):
 
     document_path: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     document_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    tamper_indicators: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    ocr_status: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    noc_path: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    noc_signature: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    noc_payload: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    authorizing_officer: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    noc_verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

@@ -16,6 +16,7 @@ class ReminderAlertResponse(BaseModel):
     status: ReminderStatus
     message: Optional[str] = None
     recipient: Optional[str] = None
+    assigned_officer_id: Optional[str] = None
     acknowledged_at: Optional[datetime] = None
     acknowledged_by: Optional[str] = None
     created_at: datetime
