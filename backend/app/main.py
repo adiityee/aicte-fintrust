@@ -1,8 +1,10 @@
 import asyncio
 from contextlib import asynccontextmanager
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.health import router as health_router
 from app.api.v1.audit import router as audit_router
@@ -13,6 +15,7 @@ from app.api.v1.reminders import router as reminders_router
 from app.api.v1.verify import router as verify_router
 from app.core.config import settings
 from app.core.database import engine, init_db
+from app.services.storage_service import storage_service
 
 
 @asynccontextmanager
@@ -64,6 +67,10 @@ app.include_router(clearance_router, prefix="/api/v1/clearance", tags=["Clearanc
 app.include_router(audit_router, prefix="/api/v1/audit", tags=["Audit Ledger"])
 app.include_router(reminders_router, prefix="/api/v1/reminders", tags=["Reminders & Escalations"])
 app.include_router(verify_router, prefix="/api/v1/verify", tags=["Public Verification"])
+
+# Mount static storage endpoint for development fallback
+os.makedirs(storage_service.local_dir, exist_ok=True)
+app.mount("/storage", StaticFiles(directory=storage_service.local_dir), name="storage")
 
 
 @app.get("/", include_in_schema=False)
