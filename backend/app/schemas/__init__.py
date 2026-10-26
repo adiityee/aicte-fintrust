@@ -27,7 +27,10 @@ from app.schemas.ocr import (
     OCRExtractionResponse,
     TamperIndicatorItem,
 )
-from app.schemas.provenance import ProvenanceResponse
+from app.schemas.provenance import (
+    FDRProvenanceResponse,
+    ProvenanceResponse,
+)
 from app.schemas.reminder import (
     CheckMaturityResponse,
     EncashmentNoticeResponse,
@@ -54,6 +57,7 @@ __all__ = [
     "FDRUploadDocumentResponse",
     "FDRDocumentUrlResponse",
     "ProvenanceResponse",
+    "FDRProvenanceResponse",
     "ReminderAlertResponse",
     "ReminderAcknowledgeRequest",
     "CheckMaturityResponse",

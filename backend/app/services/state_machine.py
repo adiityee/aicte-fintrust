@@ -222,3 +222,9 @@ class StateMachineService:
         )
 
         return fdr
+
+
+# Convenience aliases as per ARCHITECTURE_PLAN
+StateMachine = StateMachineService
+FDRStateMachine = StateMachineService
+
