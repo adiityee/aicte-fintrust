@@ -38,6 +38,10 @@ class FDRResponse(BaseModel):
     status: FDRStatus
     document_path: Optional[str] = None
     document_hash: Optional[str] = None
+    tamper_indicators: Optional[str] = None
+    ocr_status: Optional[str] = None
+    noc_path: Optional[str] = None
+    noc_signature: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     provenance_records: List[ProvenanceResponse] = Field(default_factory=list)

@@ -68,6 +68,7 @@ def test_provenance_model_and_enum():
     expected_sources = {
         "INSTITUTION_ENTERED",
         "OCR_EXTRACTED",
+        "OFFICER_VERIFIED",
         "BANK_CONFIRMED",
     }
     actual_sources = {s.value for s in ProvenanceSourceType}

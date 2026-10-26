@@ -37,3 +37,15 @@ class ClearanceActionResponse(BaseModel):
     task: ClearanceResponse
     fdr_status: FDRStatus
     all_cells_approved: bool
+
+
+class ReleaseApprovalResponse(BaseModel):
+    message: str
+    fdr_id: int
+    fdr_status: FDRStatus
+    noc_document_path: str
+    noc_download_url: str
+    ed25519_signature: str
+    public_verification_url: str
+    authorized_by: str
+    authorized_at: str

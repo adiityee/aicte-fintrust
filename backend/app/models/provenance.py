@@ -14,6 +14,7 @@ class ProvenanceSourceType(str, enum.Enum):
     """Provenance source tiers as per PS requirement."""
     INSTITUTION_ENTERED = "INSTITUTION_ENTERED"
     OCR_EXTRACTED = "OCR_EXTRACTED"
+    OFFICER_VERIFIED = "OFFICER_VERIFIED"
     BANK_CONFIRMED = "BANK_CONFIRMED"
 
 

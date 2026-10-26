@@ -61,13 +61,15 @@ class StorageService:
         file_bytes: bytes,
         filename: str,
         content_type: str = "application/pdf",
+        bucket_name: Optional[str] = None,
     ) -> str:
         """
         Uploads an FDR document with AES-256 Server-Side Encryption (SSE-S3).
         Guarantees version immutability by timestamping object keys.
         Returns the unique object key.
         """
-        self.ensure_bucket_exists()
+        target_bucket = bucket_name or self.bucket_name
+        self.ensure_bucket_exists(target_bucket)
 
         timestamp = int(datetime.now(timezone.utc).timestamp())
         clean_name = os.path.basename(filename).replace(" ", "_")
@@ -78,7 +80,7 @@ class StorageService:
 
         try:
             self.client.put_object(
-                bucket_name=self.bucket_name,
+                bucket_name=target_bucket,
                 object_name=object_key,
                 data=io.BytesIO(file_bytes),
                 length=len(file_bytes),
@@ -90,10 +92,36 @@ class StorageService:
 
         return object_key
 
+    def download_fdr_document(
+        self,
+        object_key: str,
+        bucket_name: Optional[str] = None,
+    ) -> bytes:
+        """
+        Downloads the document bytes from MinIO for processing/OCR analysis.
+        """
+        target_bucket = bucket_name or self.bucket_name
+        object_name = object_key
+        if object_key.startswith(f"{target_bucket}/"):
+            object_name = object_key[len(target_bucket) + 1 :]
+
+        try:
+            response = self.client.get_object(
+                bucket_name=target_bucket,
+                object_name=object_name,
+            )
+            data = response.read()
+            response.close()
+            response.release_conn()
+            return data
+        except Exception as exc:
+            raise RuntimeError(f"Failed to download document '{object_key}' from MinIO: {exc}") from exc
+
     def generate_presigned_url(
         self,
         object_key: str,
         expires_in_seconds: int = 300,
+        bucket_name: Optional[str] = None,
     ) -> str:
         """
         Generates a secure, temporary pre-signed download URL valid for under 5 minutes (default: 300s).
@@ -102,16 +130,16 @@ class StorageService:
         if expires_in_seconds > 300:
             expires_in_seconds = 300
 
-        bucket = self.bucket_name
+        target_bucket = bucket_name or self.bucket_name
         object_name = object_key
 
         # Strip bucket prefix if passed as 'bucket_name/object_key'
-        if object_key.startswith(f"{bucket}/"):
-            object_name = object_key[len(bucket) + 1 :]
+        if object_key.startswith(f"{target_bucket}/"):
+            object_name = object_key[len(target_bucket) + 1 :]
 
         try:
             url = self.client.presigned_get_object(
-                bucket_name=bucket,
+                bucket_name=target_bucket,
                 object_name=object_name,
                 expires=timedelta(seconds=expires_in_seconds),
             )

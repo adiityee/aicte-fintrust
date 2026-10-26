@@ -3,6 +3,7 @@ from app.models.clearance import Clearance, ClearanceCell, ClearanceStatus
 from app.models.fdr import FDR, FDRStatus
 from app.models.institution import Institution
 from app.models.provenance import Provenance, ProvenanceSourceType
+from app.models.reminder import ReminderAlert, ReminderStatus, ReminderType
 
 __all__ = [
     "Institution",
@@ -14,4 +15,7 @@ __all__ = [
     "ClearanceCell",
     "ClearanceStatus",
     "AuditLog",
+    "ReminderAlert",
+    "ReminderType",
+    "ReminderStatus",
 ]

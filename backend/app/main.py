@@ -8,6 +8,9 @@ from app.api.health import router as health_router
 from app.api.v1.audit import router as audit_router
 from app.api.v1.clearance import router as clearance_router
 from app.api.v1.fdr import router as fdr_router
+from app.api.v1.ocr import router as ocr_router
+from app.api.v1.reminders import router as reminders_router
+from app.api.v1.verify import router as verify_router
 from app.core.config import settings
 from app.core.database import engine, init_db
 
@@ -56,8 +59,11 @@ app.add_middleware(
 # Mount Routers
 app.include_router(health_router, prefix="/api/health", tags=["Health"])
 app.include_router(fdr_router, prefix="/api/v1/fdr", tags=["FDR Management"])
+app.include_router(ocr_router, prefix="/api/v1/ocr", tags=["OCR Forensics & Verification"])
 app.include_router(clearance_router, prefix="/api/v1/clearance", tags=["Clearance Gate"])
 app.include_router(audit_router, prefix="/api/v1/audit", tags=["Audit Ledger"])
+app.include_router(reminders_router, prefix="/api/v1/reminders", tags=["Reminders & Escalations"])
+app.include_router(verify_router, prefix="/api/v1/verify", tags=["Public Verification"])
 
 
 @app.get("/", include_in_schema=False)
