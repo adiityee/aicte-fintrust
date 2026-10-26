@@ -5,6 +5,7 @@ from app.services.audit_service import (
     hash_payload,
     normalize_timestamp,
 )
+from app.services.reminder_service import DEFAULT_OFFSETS, ReminderService
 from app.services.state_machine import (
     ALLOWED_TRANSITIONS,
     InvalidStateTransitionError,
@@ -23,4 +24,6 @@ __all__ = [
     "ALLOWED_TRANSITIONS",
     "StorageService",
     "storage_service",
+    "ReminderService",
+    "DEFAULT_OFFSETS",
 ]

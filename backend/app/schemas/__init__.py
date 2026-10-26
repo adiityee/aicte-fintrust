@@ -17,6 +17,12 @@ from app.schemas.fdr import (
     FDRUploadDocumentResponse,
 )
 from app.schemas.provenance import ProvenanceResponse
+from app.schemas.reminder import (
+    CheckMaturityResponse,
+    EncashmentNoticeResponse,
+    ReminderAcknowledgeRequest,
+    ReminderAlertResponse,
+)
 
 __all__ = [
     "ClearanceActionRequest",
@@ -32,4 +38,8 @@ __all__ = [
     "FDRUploadDocumentResponse",
     "FDRDocumentUrlResponse",
     "ProvenanceResponse",
+    "ReminderAlertResponse",
+    "ReminderAcknowledgeRequest",
+    "CheckMaturityResponse",
+    "EncashmentNoticeResponse",
 ]
