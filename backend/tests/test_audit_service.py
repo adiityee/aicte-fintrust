@@ -52,13 +52,14 @@ class MockAuditSession:
 
     async def execute(self, statement) -> Any:
         sql = str(statement).lower()
+        audit_logs = [r for r in self.records if isinstance(r, AuditLog)]
         if "desc" in sql:
             # Query for latest hash: select(AuditLog.current_hash).order_by(AuditLog.id.desc()).limit(1)
-            latest = self.records[-1].current_hash if self.records else None
+            latest = audit_logs[-1].current_hash if audit_logs else None
             return MockResult(scalar_value=latest)
         else:
             # Query for all logs: select(AuditLog).order_by(AuditLog.id.asc())
-            sorted_records = sorted(self.records, key=lambda r: r.id)
+            sorted_records = sorted(audit_logs, key=lambda r: r.id)
             return MockResult(items=sorted_records)
 
 

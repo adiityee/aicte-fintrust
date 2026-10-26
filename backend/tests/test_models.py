@@ -28,12 +28,18 @@ def test_fdr_model_attributes_and_enum():
     # Verify all enum values required by specification
     expected_statuses = {
         "DRAFT",
+        "SUBMITTED",
         "UNDER_SCRUTINY",
+        "QUERY_RAISED",
+        "BANK_VERIFICATION_PENDING",
         "BANK_VERIFIED",
         "ACTIVE",
         "MATURED",
+        "RENEWED",
         "RELEASE_REQUESTED",
+        "CLEARANCES_APPROVED",
         "RELEASED",
+        "ENCASHMENT_NOTICE_DRAFTED",
     }
     actual_statuses = {status.value for status in FDRStatus}
     assert expected_statuses == actual_statuses

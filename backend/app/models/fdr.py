@@ -16,12 +16,18 @@ if TYPE_CHECKING:
 class FDRStatus(str, enum.Enum):
     """FDR lifecycle statuses as per architecture plan."""
     DRAFT = "DRAFT"
+    SUBMITTED = "SUBMITTED"
     UNDER_SCRUTINY = "UNDER_SCRUTINY"
+    QUERY_RAISED = "QUERY_RAISED"
+    BANK_VERIFICATION_PENDING = "BANK_VERIFICATION_PENDING"
     BANK_VERIFIED = "BANK_VERIFIED"
     ACTIVE = "ACTIVE"
     MATURED = "MATURED"
+    RENEWED = "RENEWED"
     RELEASE_REQUESTED = "RELEASE_REQUESTED"
+    CLEARANCES_APPROVED = "CLEARANCES_APPROVED"
     RELEASED = "RELEASED"
+    ENCASHMENT_NOTICE_DRAFTED = "ENCASHMENT_NOTICE_DRAFTED"
 
 
 class FDR(Base):
@@ -38,13 +44,13 @@ class FDR(Base):
         nullable=False,
         index=True,
     )
-    fdr_number: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    bank_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    ifsc_code: Mapped[str] = mapped_column(String(20), nullable=False)
-    principal_amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
-    interest_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
-    issue_date: Mapped[date] = mapped_column(Date, nullable=False)
-    maturity_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    fdr_number: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    bank_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    ifsc_code: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    principal_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(15, 2), nullable=True)
+    interest_rate: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
+    issue_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    maturity_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
     lien_holder: Mapped[str] = mapped_column(String(255), default="AICTE", nullable=False)
     
     status: Mapped[FDRStatus] = mapped_column(

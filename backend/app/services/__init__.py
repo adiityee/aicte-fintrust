@@ -5,6 +5,11 @@ from app.services.audit_service import (
     hash_payload,
     normalize_timestamp,
 )
+from app.services.state_machine import (
+    ALLOWED_TRANSITIONS,
+    InvalidStateTransitionError,
+    StateMachineService,
+)
 
 __all__ = [
     "GENESIS_HASH",
@@ -12,4 +17,7 @@ __all__ = [
     "compute_audit_hash",
     "hash_payload",
     "normalize_timestamp",
+    "StateMachineService",
+    "InvalidStateTransitionError",
+    "ALLOWED_TRANSITIONS",
 ]

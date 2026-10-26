@@ -5,6 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 
 from app.api.health import router as health_router
+from app.api.v1.clearance import router as clearance_router
+from app.api.v1.fdr import router as fdr_router
 from app.core.config import settings
 from app.core.database import engine, init_db
 
@@ -50,8 +52,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount Health Check Router
+# Mount Routers
 app.include_router(health_router, prefix="/api/health", tags=["Health"])
+app.include_router(fdr_router, prefix="/api/v1/fdr", tags=["FDR Management"])
+app.include_router(clearance_router, prefix="/api/v1/clearance", tags=["Clearance Gate"])
 
 
 @app.get("/", include_in_schema=False)
